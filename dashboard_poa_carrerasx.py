@@ -19,7 +19,7 @@ def get_base64_image(image_path):
         return None
 
 # Codificar el logo a base64
-logo_base64 = get_base64_image("C:/Users/VivoBook/Downloads/Nueva carpeta/LOGO-RECTANGULAR_SIN-FONDO.png")
+logo_base64 = get_base64_image("LOGO-RECTANGULAR_SIN-FONDO.png")
 logo_data_url = f"data:image/png;base64,{logo_base64}" if logo_base64 else None
 
 # =============================================================================
