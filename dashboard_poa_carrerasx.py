@@ -8,19 +8,6 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 import os
-import base64
-
-def get_base64_image(image_path):
-    """Convierte una imagen a base64."""
-    try:
-        with open(image_path, "rb") as img_file:
-            return base64.b64encode(img_file.read()).decode()
-    except:
-        return None
-
-# Codificar el logo a base64
-logo_base64 = get_base64_image("C:/Users/VivoBook/Downloads/Nueva carpeta/LOGO-RECTANGULAR_SIN-FONDO.png")
-logo_data_url = f"data:image/png;base64,{logo_base64}" if logo_base64 else None
 
 # =============================================================================
 # CONFIGURACIÓN DE PÁGINA - FONDO OSCURO
@@ -44,6 +31,9 @@ st.markdown("""
         padding: 1rem 1.5rem;
         border-radius: 8px;
         margin-bottom: 1.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
     }
     .header-title { color: white; font-family: 'Times New Roman', serif; font-size: 1.4rem; font-weight: bold; margin: 0; }
     .header-subtitle { color: #c9d1d9; font-family: 'Arial', sans-serif; font-size: 0.85rem; margin: 0; }
@@ -78,20 +68,28 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # =============================================================================
-# CARGA DE DATOS SIMPLIFICADA
+# CARGA DE DATOS DESDE GOOGLE SHEETS
 # =============================================================================
+# URL del Google Sheets (exportar como Excel)
+GOOGLE_SHEETS_URL = "https://docs.google.com/spreadsheets/d/1FYv0ZFXwqOkbo2YYTGuW2ommKCmk9jTU/export?format=xlsx"
+
 @st.cache_data
-def load_data():
+def load_data_from_url(url):
     """
-    Carga los datos desde el archivo Excel.
+    Carga los datos desde una URL de Google Sheets.
     """
     try:
-        file_path = "https://raw.githubusercontent.com/TU_USUARIO/REPO/main/Matriz%20Seguimiento%20Carreras%202025.xlsx"
-        
-        # Obtener nombres de todas las hojas
-        xlsx = pd.ExcelFile(file_path)
-        all_sheets = xlsx.sheet_names
-        
+        df = pd.read_excel(url)
+        return df
+    except Exception as e:
+        st.error(f"Error al cargar datos: {e}")
+        return None
+
+def get_carreras_from_excel(df, all_sheets):
+    """
+    Procesa los datos del Excel y extrae la información de las carreras.
+    """
+    try:
         # Hojas administrativas a excluir
         excluded = ['resumen', 'Resumen', 'resumen_carreras', 'indicadores_carreras', 
                     'actividades_carreras', 'Hoja 1', 'Dashboard', 'Data', 'Config',
@@ -101,31 +99,30 @@ def load_data():
         carreras_names = [s for s in all_sheets if s not in excluded]
         
         # Cargar hoja resumen_carreras
-        df_resumen = pd.read_excel(file_path, sheet_name='resumen_carreras')
+        if 'resumen_carreras' in all_sheets:
+            df_resumen = pd.read_excel(GOOGLE_SHEETS_URL, sheet_name='resumen_carreras')
+        else:
+            df_resumen = df
+            
         df_resumen['CARRERA'] = df_resumen['CARRERA'].astype(str).str.strip()
         
-        # Filtrar solo 2025
-        df_resumen = df_resumen[df_resumen['año'] == 2025]
+        # Filtrar solo 2025 si existe columna año
+        if 'año' in df_resumen.columns:
+            df_resumen = df_resumen[df_resumen['año'] == 2025]
         
-        # Crear diccionario: cada carrera tiene su fila en resumen_carreras
-        # Vamos a asumir que las filas de resumen_carreras corresponden a las hojas de carreras
-        # El orden debería ser el mismo
-        
-        # Crear un diccionario con los datos de cada carrera
+        # Crear diccionario con los datos de cada carrera
         carreras_data = {}
         
         for idx, row in df_resumen.iterrows():
             carrera_id = str(row.get('CARRERA', ''))
             
             if carrera_id.startswith('gid='):
-                # Usar el índice de la fila para encontrar la carrera correspondiente
                 row_position = list(df_resumen.index).index(idx)
                 if row_position < len(carreras_names):
                     nombre = carreras_names[row_position]
                 else:
                     nombre = carrera_id
             else:
-                # Si ya es un nombre, usarlo directamente
                 nombre = carrera_id
             
             carreras_data[nombre] = {
@@ -156,10 +153,8 @@ def load_data():
         return carreras_data, carreras_names
         
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error al procesar datos: {e}")
         return {}, []
-
-CARRERAS_DATA, CARRERAS_LIST = load_data()
 
 # =============================================================================
 # PALETA DE COLORES
@@ -179,7 +174,6 @@ def grafico_barras(carreras_data, carreras_list):
     if not carreras_data or not carreras_list:
         return None
     
-    # Crear lista de datos
     datos = []
     for carrera in carreras_list:
         if carrera in carreras_data:
@@ -282,23 +276,45 @@ def grafico_donut(avance):
 def main():
     """Función principal."""
     
-    # Encabezado con logo dentro del cuadro azul
-    st.markdown(f"""
-    <div class="header-container" style="display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 1.5rem;">
+    # Cargar datos desde Google Sheets
+    df = load_data_from_url(GOOGLE_SHEETS_URL)
+    
+    if df is None:
+        st.error("No se pudo cargar el archivo de datos. Verifica que el Google Sheets esté compartido con enlace.")
+        return
+    
+    # Obtener nombres de las hojas
+    try:
+        xlsx = pd.ExcelFile(GOOGLE_SHEETS_URL)
+        all_sheets = xlsx.sheet_names
+    except:
+        all_sheets = []
+    
+    # Procesar datos
+    CARRERAS_DATA, CARRERAS_LIST = get_carreras_from_excel(df, all_sheets)
+    
+    if not CARRERAS_LIST:
+        st.error("No se encontraron carreras en los datos.")
+        return
+    
+    # Encabezado con logo
+    st.markdown("""
+    <div class="header-container">
         <div>
-            <h1 class="header-title" style="margin: 0;">INSTITUTO TECNOLÓGICO SUPERIOR AZUAY</h1>
-            <p class="header-subtitle" style="margin: 0;">SEGUIMIENTO POA - CARRERAS 2025</p>
+            <h1 class="header-title">INSTITUTO TECNOLÓGICO SUPERIOR AZUAY</h1>
+            <p class="header-subtitle">SEGUIMIENTO POA - CARRERAS 2025</p>
         </div>
-        <img src="{logo_data_url}" style="height: 100px; max-width: 350px;">
     </div>
     """, unsafe_allow_html=True)
     
-    # Selector de carrera
-    if not CARRERAS_LIST:
-        st.error("❌ No se encontraron carreras.")
-        return
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    carrera_seleccionada = st.selectbox("SELECCIONAR CARRERA:", options=['Todas las Carreras'] + CARRERAS_LIST, index=0)
+    # Selector de carrera
+    st.sidebar.title("Filtros")
+    carrera_seleccionada = st.sidebar.selectbox("SELECCIONAR CARRERA:", options=['Todas las Carreras'] + CARRERAS_LIST, index=0)
+    
+    st.sidebar.markdown("---")
+    st.sidebar.info(f"Total de carreras: {len(CARRERAS_LIST)}")
     
     st.markdown("<hr>", unsafe_allow_html=True)
     
@@ -313,7 +329,6 @@ def main():
         informes_entregados = len([c for c in CARRERAS_LIST if c in CARRERAS_DATA and CARRERAS_DATA[c]['informe_semestral'] == 'ENTREGADO'])
         matrices_entregadas = len([c for c in CARRERAS_LIST if c in CARRERAS_DATA and CARRERAS_DATA[c]['matriz_semestral'] == 'ENTREGADO'])
         
-        # Layout 3 columnas
         col_izq, col_centro, col_der = st.columns([1, 2, 1])
         
         with col_izq:
@@ -353,7 +368,7 @@ def main():
             </div>
             """, unsafe_allow_html=True)
     
-    # VISTA POR CARRERA - CORREGIDO: muestra solo la carrera seleccionada
+    # VISTA POR CARRERA
     else:
         if carrera_seleccionada not in CARRERAS_DATA:
             st.error(f"No hay datos para: {carrera_seleccionada}")
@@ -381,8 +396,6 @@ def main():
         
         with col_centro:
             st.markdown(f'<p class="section-title">AVANCE DE {carrera_seleccionada.upper()}</p>', unsafe_allow_html=True)
-            
-            # CORRECCIÓN: Usar la función para gráfica individual
             fig = grafico_barras_unica(carrera_seleccionada, datos['avance_poa'])
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
