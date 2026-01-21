@@ -86,7 +86,7 @@ def load_data():
     Carga los datos desde el archivo Excel.
     """
     try:
-        file_path = r'C:\Users\VivoBook\Downloads\Nueva carpeta\Matriz Seguimiento Carreras 2025.xlsx'
+        file_path = r'Matriz Seguimiento Carreras 2025.xlsx'
         
         # Obtener nombres de todas las hojas
         xlsx = pd.ExcelFile(file_path)
